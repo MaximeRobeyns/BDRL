@@ -180,8 +180,8 @@ the form:
     \Theta(f_i-y)\Big),
 \]
 for $\Theta$ a Heaviside step function, and $\alpha_i$, $\beta_i$ and $f_i$ some
-trainable parameters. We assume $\alpha_i, \beta_i > 0$ for all $i \in [1,N]$,
-and that the $f_i$ are ordered, such that $f_i \le f_{i+1}$.
+trainable parameters. We assume that the $f_i$ are ordered, such that $f_i \le
+f_{i+1}$.
 
 % TODO insert diagram here of each individual loss term.
 
@@ -231,21 +231,33 @@ these line segments. Beginning with the case where $f_j < y \le f_{j+1}$:
                                         \frac{1}{a_j}e^b_j\left(e^{a_jf_{j+1}}-e^{a_jf_j}\right).
 \end{align*}
 When $y \in (-\infty, f_1]$, we have
-\begin{align*}
-  \lim_{\ell\to-\infty} \int^{f_1}_{\ell}e^{a_0y+b_0}dy &= \lim_{\ell\to-\infty} \left[\frac{1}{a_0}e^{a_0y+b_0}\right]^{f_1}_{\ell} \\
-                                                  &= \lim_{\ell\to-\infty} \frac{1}{a_0}e^{b_0}\left(e^{a_0f_1}-e^{a_0\ell}) \\
-                                                  &= \frac{1}{a_0}e^{a_0f_1+b_0},
-\end{align*}
-since $a_0>0$. Similarly for the segment where $y\in (f_N, \infty)$,
-\begin{align*}
+\begin{align}
+  \lim_{\ell\to-\infty} \int^{f_1}_{\ell}e^{a_0y+b_0}dy &= \lim_{\ell\to-\infty} \left[\frac{1}{a_0}e^{a_0y+b_0}\right]^{f_1}_{\ell} \nonumber \\
+                                                  &= \lim_{\ell\to-\infty}
+                                                  \frac{1}{a_0}e^{b_0}\left(e^{a_0f_1}-e^{a_0\ell})
+                                                    \nonumber \\
+                                                  &= \frac{1}{a_0}e^{a_0f_1+b_0} \tag{A1} \label{eq:assumption1} \nonumber,
+\end{align}
+where we assume that $a_0 > 0$ in (\ref{eq:assumption1}) above. To enforce
+this, first recall that $a_0 = \sum^N_{i=1}\beta_i$, and in particular that
+$\beta_1$ only features in the $a_0$ and $b_0$ calculations. Hence we can treat
+$\beta_1$ as a `free parameter' which we use to ensure that $a_0 > 0$. Hence,
+$\beta_1 + \sum^{N}_{i=2}\beta_i > 0$ and we define $\beta_1 &=
+-\sum^N_{i=2}\beta_i + \epsilon^+$ for some small positive $\epsilon^+$.
+
+Similarly for the segment where $y\in (f_N, \infty)$,
+\begin{align}
   \lim_{\ell\to\infty} \int^{\ell}_{f_N}e^{a_Ny+b_N}dy &=
-  \lim_{\ell\to\infty}\left[\frac{1}{a_N}e^{a_Ny+b_N}\right]^{\ell}_{f_N} \\
-                                               &=
-                                               \lim_{\ell\to\infty}\frac{1}{a_N}e^{b_N}\left(e^{a_N\ell}-e^{a_Nf_N})
-                                                 \\
-                                               &= -\frac{1}{a_N}e^{a_Nf_N+b_N}
-\end{align*}
-since $a_N < 0$.
+  \lim_{\ell\to\infty}\left[\frac{1}{a_N}e^{a_Ny+b_N}\right]^{\ell}_{f_N} \nonumber \\
+                                               &= \lim_{\ell\to\infty}\frac{1}{a_N}e^{b_N}\left(e^{a_N\ell}-e^{a_Nf_N}) \nonumber \\
+                                               &= -\frac{1}{a_N}e^{a_Nf_N+b_N} \tag{A2} \label{eq:assumption2}
+\end{align}
+where we have made the assumption that $a_N < 0$ in (\ref{eq:assumption2}).
+Similarly to (\ref{eq:assumption2}), we observe that $a_N =
+-\sum^N_{i=1}\alpha_i$ and that $\alpha_N$ only features in the calculation of
+$a_N$ and $b_N$. Therefore we write $-\sum^{N-1}_{i=1} \alpha_i - \alpha_N < 0$
+and correspondingly we set $\alpha_N = \sum^{N-1}_{i=1} + \epsilon_i$.
+
 We can now explicitly write down the normalising term $Z$ as the sum of these
 integrals:
 \begin{align*}
