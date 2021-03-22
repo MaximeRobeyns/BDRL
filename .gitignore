@@ -1,0 +1,9 @@
+*.aux
+*.blg
+*.bbl
+*.fdb_latexmk
+*.fls
+*.log
+*.synctex.gz
+.ipynb_checkpoints/
+Backup.ipynb
