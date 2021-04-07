@@ -1,0 +1,40 @@
+# DQN configuration Options
+# Prefix constants by %, and 'external configurables' by @
+# See utils/gin/configurable.py for available values.
+
+# General
+main.random_episodes = 100
+main.episodes        = 200
+main.agent           = @DQN_agent
+main.env             = 'CartPole-v0'
+main.render          = True
+main.render_training = False
+
+# Network
+ANN.layer_sizes = (25,)
+ANN.dtype       = %float32
+ANN.device      = 'cpu'
+
+# Agent
+DQN_agent.train_batch       = 32
+DQN_agent.seed              = 42
+DQN_agent.dtype             = %float32
+DQN_agent.device            = 'cpu'
+DQN_agent.storage_device    = 'cpu'
+DQN_agent.opt               = @adam
+DQN_agent.lr                = 0.05
+DQN_agent.eps_min           = 0.05
+DQN_agent.eps_max           = 0.9
+DQN_agent.eps_decay         = 100
+DQN_agent.gamma             = 0.99
+DQN_agent.target_update     = 200
+DQN_agent.loss              = @huberloss
+DQN_agent.scale_rewards     = True
+DQN_agent.train_steps_per_transition = 20
+
+# Reward Scaling
+RewardScaler.min       = 0
+RewardScaler.max       = 200
+RewardScaler.scale_min = 0
+RewardScaler.scale_max = 1
+

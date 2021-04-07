@@ -1,0 +1,15 @@
+.DS_Store
+.idea
+*.log
+tmp/
+
+*.py[cod]
+*.egg
+build
+htmlcov
+.license_boilerplate
+sync
+*/__pycache__
+JOB_OUT
+BDRL*
+notes.txt

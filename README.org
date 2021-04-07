@@ -1,0 +1,34 @@
+#+TITLE:     BDRL Experiments
+#+AUTHOR:    Maxime Robeyns
+#+EMAIL:     maximerobeyns@gmail.com
+
+This repository is for developing and testing some Bayesian distributional RL
+algorithms.
+
+** Quickstart
+
+Clone the repository
+
+#+BEGIN_SRC bash
+git clone https://github.com/maximerobeyns/bdrl
+#+END_SRC
+
+And install in development mode:
+
+#+BEGIN_SRC bash
+pip install -e .
+#+END_SRC
+
+** Running an Agent
+
+Agents are configured using [[https://github.com/google/gin-config][gin]] configuration files, so that the agent
+configurations and hyperparameters are all in one place, in version control and
+you don't have to pass long command line arguments. These configuration files
+live in the =/configs= directory.
+
+To run an agent, simply write a configuration file, and provide it to the
+runner:
+
+#+BEGIN_SRC bash
+./main.py -c configs/dqn.gin
+#+END_SRC
