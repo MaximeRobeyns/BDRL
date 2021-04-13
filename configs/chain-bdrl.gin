@@ -6,12 +6,12 @@
 main.random_episodes = 50
 main.episodes        = 50
 main.agent           = @BDRL_agent
-main.env             = 'CartPole-v0'
+main.env             = 'ChainMDP-v0'
 main.render          = True
-main.render_training = True
+main.render_training = False
 
 # Network
-BDR.inducing_batch = 40
+BDR.inducing_batch = 30
 BDR.N              = 5
 BDR.layer_sizes    = (50,)
 BDR.inducing_data  = None
@@ -20,7 +20,7 @@ BDR.device         = 'cpu'
 BDR.f_postproc     = 'sort'
 
 # Agent
-BDRL_agent.train_batch       = 30
+BDRL_agent.train_batch       = 10
 BDRL_agent.seed              = 42
 BDRL_agent.dtype             = %float32
 BDRL_agent.device            = 'cpu'
@@ -32,12 +32,15 @@ BDRL_agent.S_eval            = 80
 BDRL_agent.S_train           = 15
 BDRL_agent.N_train           = 20
 BDRL_agent.S_explore         = 1
-BDRL_agent.scale_rewards     = True
-BDRL_agent.train_steps_per_transition = 5
+BDRL_agent.scale_rewards     = False
+BDRL_agent.train_steps_per_transition = 10
 
 # Reward Scaling
-RewardScaler.min       = 0
-RewardScaler.max       = 200
-RewardScaler.scale_min = 0
+RewardScaler.min       = -1
+RewardScaler.max       = 1
+RewardScaler.scale_min = -1
 RewardScaler.scale_max = 1
 
+# Environment
+ChainMDP.length         = 3
+ChainMDP.num_pts_render = 100

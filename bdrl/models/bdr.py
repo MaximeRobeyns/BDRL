@@ -20,6 +20,7 @@ implemented (mean, mode(s), log_prob, log_norm, cdf, icdf, sample...).
 import gin
 import math
 import bayesfunc as bf
+from bayesfunc.priors import ScalePrior, NealPrior
 from numbers import Real, Number
 
 import torch
@@ -97,6 +98,12 @@ class BDR(nn.Module):
         self.net_layers = nn.Sequential(*layers)
         kwargs['full_prec'] = True
         kwargs['bias']      = True
+        # linspace inducing data
+        # GP_block = nn.Sequential(
+        #     bf.BiasFeature(),
+        #     bf.ReluKernelFeatures(inducing_batch=inducing_batch),
+        #     bf.GIGP(out_features=10, inducing_batch=inducing_batch)
+        # )
         self.f      = bf.GILinear(layer_sizes[-1], N, **kwargs)
         self.alpha  = bf.GILinear(layer_sizes[-1], N, **kwargs)
         self.beta   = bf.GILinear(layer_sizes[-1], N, **kwargs)
@@ -172,6 +179,153 @@ class BDR(nn.Module):
 
         return f, alpha, beta
 
+# Alternative Approaches ======================================================
+
+class _DN_ANN(nn.Module):
+    """ANN to output parameters for the piecewise-linear log likelihood"""
+
+    def __init__(self, in_features, N=10, layer_sizes=(50,), f_postproc='sort'):
+        super().__init__()
+        self.in_features    = (in_features,)
+        self.hidden         = len(layer_sizes)
+        self.N              = N
+        self.f_postproc     = f_postproc
+        assert(len(layer_sizes) >= 1)
+
+        layers = [nn.Linear(in_features, layer_sizes[0], bias=True),
+                  nn.ReLU()]
+        for i in range(1, len(layer_sizes)):
+            layers += [nn.Linear(layer_sizes[i-1], layer_sizes[i], bias=True),
+                       nn.ReLU()]
+        self.net_layers = nn.Sequential(*layers)
+
+        self.f     = nn.Linear(layer_sizes[-1], N, bias=True)
+        self.alpha = nn.Linear(layer_sizes[-1], N, bias=True)
+        self.beta  = nn.Linear(layer_sizes[-1], N, bias=True)
+
+    def forward(self, x):
+        # in_features must have rank 1 (flatten features with rank > 1)
+        assert x.shape[-1:] == self.in_features
+
+        x = self.net_layers(x)
+        f     = self.f(x)
+        alpha = self.alpha(x)
+        beta  = self.beta(x)
+
+        # Option 1: simple sorting
+        if self.f_postproc == 'sort':
+            f = f.sort(-1)[0]
+
+        # Option 2: sort f, and keep corresponding alpha and beta together:
+        # (no observed effect on performance)
+        # if self.f_postproc == 'sort':
+        #     fab   = t.cat((f.unsqueeze(0), alpha.unsqueeze(0), beta.unsqueeze(0)), 0)
+        #     idxs  = f.sort(-1).indices.expand(3, *list(f.shape))
+        #     fab   = t.gather(fab, len(f.shape), idxs)
+        #     f, alpha, beta = fab
+
+        # Option 3: Offset from f0
+        # (problem: tends to skew data to the right)
+        # f0 = f[...,0].unsqueeze(-1)
+        # f = t.cat((f0, (f0 + F.softplus(f[...,1:])).cumsum(-1)), -1)
+
+        # Option 4: Midpoint offset
+        if self.f_postproc == 'sum':
+            m = math.floor(f.shape[-1]/2)
+            fm = f[...,m].unsqueeze(-1)
+            f = t.cat((
+                fm - (F.softplus(f[...,:m]).flip(-1).cumsum(-1)),
+                fm,
+                fm + F.softplus(f[...,m+1:]).cumsum(-1)
+            ), -1)
+
+        # ---------------------------------------------------------------------
+
+        alpha = t.cat((
+            alpha[...,:-1],
+            -alpha[...,:-1].sum(-1).unsqueeze(-1) +
+            F.softplus(alpha[...,-1]).unsqueeze(-1)
+        ), -1)
+
+        beta = t.cat((
+            -beta[...,1:].sum(-1).unsqueeze(-1) +
+            F.softplus(beta[...,0]).unsqueeze(-1),
+            beta[...,1:]
+        ), -1)
+
+        return f, alpha, beta
+
+@gin.configurable('Ensemble')
+class Ensemble(nn.Module):
+    """An ensemble of ANNs providing (non-Bayesian) uncertainty estimates."""
+
+    def __init__(self, in_features, E=40, N=7, layer_sizes=(50,),
+                 opt=t.optim.Adam, lr=0.05, dtype=t.float32, device='cpu',
+                 f_postproc='sort'):
+        """
+        Args:
+            in_features (Int): The number of input features.
+            E (Int): The number of networks to use in the ensemble
+            N (Int): The number of components to use in the piecewise linear
+                log-likelihood.
+            layer_sizes (Tuple): A tuple with the size of the hidden layers.
+                Note, the number of hidden layers to use is implicitly
+                specified by the size of this tuple.
+            inducing_data (Tensor): Provide some initial inducing point locations.
+            dtype (torch.dtype): The datatype to use
+            device (String): The device memory to use
+            f_postproc (String): Either ``sort`` or ``sum``. Sort is more
+                'stable', but sum can give better representations.
+        """
+        super().__init__()
+        self.in_features    = (in_features,)
+        self.hidden         = len(layer_sizes)
+        self.E              = E
+        self.N              = N
+        self.dtype          = dtype
+        self.device         = device
+        self.f_postproc     = f_postproc
+        assert(len(layer_sizes) >= 1)
+
+        self.models = []
+        for _ in range(E):
+            tmp_model = _DN_ANN(in_features, N, layer_sizes, f_postproc)
+            tmp_model = tmp_model.to(dtype=self.dtype, device=self.device)
+            tmp_opt = opt(tmp_model.parameters(), lr=lr)
+            self.models.append({
+                'm':   tmp_model,
+                'opt': tmp_opt
+            })
+
+    def train(self, X, y, epochs=10, batch_size=64):
+        data_len = X.shape[0]
+        for m in self.models:
+            for e in range(epochs):
+                batch_idx = t.randperm(data_len)[:batch_size]
+                (f, alpha, beta) = m['m'](X[batch_idx])
+                # need to add in dim 1 because there are no posterior samples
+                f     = f.unsqueeze(0)
+                alpha = alpha.unsqueeze(0)
+                beta  = beta.unsqueeze(0)
+                ll = BDR_dist(f, alpha, beta).log_prob(y[batch_idx])
+                ll = ll.sum(-1).mean(-1)
+                m['opt'].zero_grad()
+                (-ll.mean()).backward()
+                m['opt'].step()
+
+    def f(self, X):
+        partial_fs = []
+        partial_alphas = []
+        partial_betas = []
+        with t.no_grad():
+            for m in self.models:
+                (f, alpha, beta) = m['m'](X)
+                partial_fs.append(f.unsqueeze(0))
+                partial_alphas.append(alpha.unsqueeze(0))
+                partial_betas.append(beta.unsqueeze(0))
+
+        return t.cat(partial_fs, 0), t.cat(partial_alphas, 0), t.cat(partial_betas, 0)
+
 # BDR distribution ------------------------------------------------------------
 
 class BDR_dist(Distribution):
@@ -198,9 +352,7 @@ class BDR_dist(Distribution):
 
     def _calc_mean(self, f, a, b, z):
         """Calculates the mean using the provided parameters."""
-        #
-        # TODO There is an error here!
-        #
+
         c_1 = (t.exp(a[...,0] * f[...,0] + b[...,0]) *
                (a[...,0] * f[...,0] - 1)
               ) / a[...,0]**2
@@ -464,6 +616,7 @@ class BDR_dist(Distribution):
         assert f.shape == alpha.shape
         assert alpha.shape == beta.shape
         self.dtype = f.dtype
+        self.device = self.f.device
         batch_shape = self.f.shape[:-1]
         event_shape = t.Size([1])
         super(BDR_dist, self).__init__(batch_shape, event_shape, validate_args)
@@ -557,7 +710,7 @@ class BDR_dist(Distribution):
     def rsample(self, sample_shape=t.Size(), avg=True):
         if type(sample_shape) == int:
             sample_shape = (sample_shape,)
-        pts = t.rand(sample_shape, dtype=self.dtype).flatten()
+        pts = t.rand(sample_shape, dtype=self.dtype, device=self.device).flatten()
         samples = self.icdf(pts, avg=avg).squeeze()
         base_shape = self._true_batch_shape if avg else self._batch_shape
         samples = samples.reshape(base_shape + sample_shape)

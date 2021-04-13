@@ -15,11 +15,13 @@
 Defines a base agent class.
 """
 
+import sys
 import abc
 import gym
 import time
 import torch as t
 
+from bdrl.models import BDR_dist
 from bdrl.utils import buffer
 from bdrl.environments import wrappers
 
@@ -118,6 +120,8 @@ class Agent(metaclass=abc.ABCMeta):
                 a = self.get_action(s)
 
             sp, r, done, _ = self.env.step(a)
+            if render:
+                self.env.render()
 
             total_reward += r
             self.buffer.add_state(s, a, sp, r, done)
@@ -142,20 +146,19 @@ class Agent(metaclass=abc.ABCMeta):
 
         if render:
             self.env.render()
-            # time.sleep(1)
+            time.sleep(0.25)
 
         while not done:
             t += 1
             a = self.get_action(s)
             s, r, done, _ = self.env.step(a)
+            total_reward += r
             if render:
                 self.env.render()
-                # time.sleep(1)
-            total_reward += r
+                time.sleep(0.25)
         return total_reward
 
 class DistributionalAgent(Agent):
-
     @abc.abstractmethod
     def _Qdist(self, s, a, samples=100, sample_dict=None):
         """Return the value distribution.
@@ -169,6 +172,58 @@ class DistributionalAgent(Agent):
         """
         raise NotImplementedError
 
+    def get_return_dist(self, s):
+        """Returns a class extending the base PyTorch Distribution class for
+        the estimated return density at the provided s location, for all
+        possible a.
+        """
+        raise NotImplementedError
+
+    def train_rollout(self, random_exploration=False, render=False):
+        """Train until either done or max_episode_steps
+        Args:
+            random_exploration (Boolean): if True, collect initial data to fill
+                replay buffer
+            render (Boolean): whether to render the train rollout
+        Returns:
+            total_reward
+        """
+        s = self.env.reset()
+        done = False
+        t = 0
+        total_reward = 0.
+
+        if render:
+            a = self.get_action(s)
+            return_dist = self.get_return_dists(s)
+            self.env.render(dist=return_dist)
+            time.sleep(0.5)
+
+        while (not done) and (t < self.max_episode_steps):
+            if random_exploration:
+                a = self.env.action_space.sample()
+            else:
+                a = self.get_action(s)
+
+            sp, r, done, _ = self.env.step(a)
+            total_reward += r
+
+            if render:
+                a = self.get_action(s)
+                return_dist = self.get_return_dists(s)
+                self.env.render(dist=return_dist)
+                time.sleep(0.5)
+
+            self.buffer.add_state(s, a, sp, r, done)
+
+            if not random_exploration:
+                for _ in range(self.train_steps_per_transition):
+                    self.train_step()
+            t += 1
+            s = sp
+
+        return total_reward
+
     def eval_rollout(self, render=False):
         s = self.env.reset()
         done = False
@@ -177,9 +232,9 @@ class DistributionalAgent(Agent):
 
         if render:
             a = self.get_action(s)
-            theta, _, _ = self._Qdist(s, a)
-            self.env.render_dist(theta)
-            time.sleep(1)
+            return_dist = self.get_return_dists(s)
+            self.env.render(dist=return_dist)
+            time.sleep(0.5)
 
         while not done:
             t += 1
@@ -189,8 +244,8 @@ class DistributionalAgent(Agent):
 
             # placing render here allows us to see the final state.
             if render:
-                theta, _, _ = self._Qdist(s, a)
-                self.env.render_dist(theta)
-                time.sleep(1)
+                return_dist = self.get_return_dists(s)
+                self.env.render(dist=return_dist)
+                time.sleep(0.5)
 
         return total_reward

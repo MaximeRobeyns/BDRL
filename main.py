@@ -27,7 +27,7 @@ import torch as t
 
 # Agents
 
-from bdrl.agents import BDRL, DQN
+from bdrl.agents import BDRL, DQN, EnsembleAgent
 
 from bdrl.utils.gin import gin as gin
 from bdrl import environments
@@ -61,8 +61,6 @@ if __name__ == "__main__":
     desc = """
 Bayesian distributional reinforcement learning program.
     """
-    # read in a configuration file, and initialise resources appropriately.
-    # The agent should be the 'base class'. In its constructor, it should initialise the required networks and memory.
     parser = argparse.ArgumentParser("main.py", description=desc)
 
     parser.add_argument(
