@@ -29,10 +29,10 @@ def generate_data():
         x_1**3 + 8 + 1 * noise.sample((int(data_size/2), in_features)),
         x_2**3 - 8 - 0.1 * noise.sample((int(data_size/2), in_features))
     ))
-    # y = t.cat((
-    #     x_1**3 + 8 + 0.1 * noise.sample((int(data_size/2), in_features)),
-    #     x_2**3 - 8 - 0.1 * noise.sample((int(data_size/2), in_features))
-    # ))
+    y = t.cat((
+        x_1**3 + 8 + 0.1 * noise.sample((int(data_size/2), in_features)),
+        x_2**3 - 8 - 0.1 * noise.sample((int(data_size/2), in_features))
+    ))
 
     scale = y.std()
     y = y/scale

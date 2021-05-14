@@ -17,11 +17,13 @@ distribution which takes the resulting parameters, with some common methods
 implemented (mean, mode(s), log_prob, log_norm, cdf, icdf, sample...).
 """
 
+import sys
 import gin
 import math
 import bayesfunc as bf
 from bayesfunc.priors import ScalePrior, NealPrior
 from numbers import Real, Number
+from bdrl.utils import Squareplus
 
 import torch
 import torch as t
@@ -91,10 +93,12 @@ class BDR(nn.Module):
         # TODO add options for other layer types (factorised linear, DGP etc.)
         kwargs = {'inducing_batch': self.inducing_batch}
         layers = [bf.GILinear(in_features, layer_sizes[0], **kwargs),
-                  nn.ReLU()]
+                  Squareplus(a=1.5)]
+                  # nn.ReLU()]
         for i in range(1, len(layer_sizes)):
             layers += [bf.GILinear(layer_sizes[i-1], layer_sizes[i], **kwargs),
-                       nn.ReLU()]
+                       Squareplus(a=1.5)]
+                       # nn.ReLU()]
         self.net_layers = nn.Sequential(*layers)
         kwargs['full_prec'] = True
         kwargs['bias']      = True
@@ -177,6 +181,20 @@ class BDR(nn.Module):
             beta[...,1:]
         ), -1)
 
+        # Numerical stability: adds epsilon to small values
+        EPS = 0.00001
+        if (alpha.abs() <= EPS).any():
+            # print("Warning: alpha is small: ", (alpha.abs() <= EPS).sum())
+            alpha = t.where(alpha.abs() < EPS,
+                              alpha + (alpha.sign()+0.1) * EPS,
+                              alpha)
+
+        if (beta.abs() <= EPS).any():
+            # print("Warning: beta is small:", (beta.abs() <= EPS).sum())
+            beta = t.where(beta.abs() < EPS,
+                              beta + (beta.sign()+0.1) * EPS,
+                              beta)
+
         return f, alpha, beta
 
 # Alternative Approaches ======================================================
@@ -216,19 +234,6 @@ class _DN_ANN(nn.Module):
         if self.f_postproc == 'sort':
             f = f.sort(-1)[0]
 
-        # Option 2: sort f, and keep corresponding alpha and beta together:
-        # (no observed effect on performance)
-        # if self.f_postproc == 'sort':
-        #     fab   = t.cat((f.unsqueeze(0), alpha.unsqueeze(0), beta.unsqueeze(0)), 0)
-        #     idxs  = f.sort(-1).indices.expand(3, *list(f.shape))
-        #     fab   = t.gather(fab, len(f.shape), idxs)
-        #     f, alpha, beta = fab
-
-        # Option 3: Offset from f0
-        # (problem: tends to skew data to the right)
-        # f0 = f[...,0].unsqueeze(-1)
-        # f = t.cat((f0, (f0 + F.softplus(f[...,1:])).cumsum(-1)), -1)
-
         # Option 4: Midpoint offset
         if self.f_postproc == 'sum':
             m = math.floor(f.shape[-1]/2)
@@ -252,6 +257,20 @@ class _DN_ANN(nn.Module):
             F.softplus(beta[...,0]).unsqueeze(-1),
             beta[...,1:]
         ), -1)
+
+        # Numerical stability: adds epsilon to small values
+        # EPS = 0.00001
+        # if (alpha.abs() <= EPS).any():
+        #     print("Warning: alpha is small: ", (alpha.abs() <= EPS).sum())
+        #     alpha = t.where(alpha.abs() < EPS,
+        #                       alpha + (alpha.sign()+0.1) * EPS,
+        #                       alpha)
+
+        # if (beta.abs() <= EPS).any():
+        #     print("Warning: beta is small:", (beta.abs() <= EPS).sum())
+        #     beta = t.where(beta.abs() < EPS,
+        #                       beta + (beta.sign()+0.1) * EPS,
+        #                       beta)
 
         return f, alpha, beta
 
@@ -299,6 +318,7 @@ class Ensemble(nn.Module):
 
     def train(self, X, y, epochs=10, batch_size=64):
         data_len = X.shape[0]
+        # TODO parallelise this
         for m in self.models:
             for e in range(epochs):
                 batch_idx = t.randperm(data_len)[:batch_size]
@@ -317,12 +337,13 @@ class Ensemble(nn.Module):
         partial_fs = []
         partial_alphas = []
         partial_betas = []
-        with t.no_grad():
-            for m in self.models:
-                (f, alpha, beta) = m['m'](X)
-                partial_fs.append(f.unsqueeze(0))
-                partial_alphas.append(alpha.unsqueeze(0))
-                partial_betas.append(beta.unsqueeze(0))
+        # with t.no_grad():
+            # TODO must parallelise this
+        for m in self.models:
+            (f, alpha, beta) = m['m'](X)
+            partial_fs.append(f.unsqueeze(0))
+            partial_alphas.append(alpha.unsqueeze(0))
+            partial_betas.append(beta.unsqueeze(0))
 
         return t.cat(partial_fs, 0), t.cat(partial_alphas, 0), t.cat(partial_betas, 0)
 
@@ -365,6 +386,24 @@ class BDR_dist(Distribution):
 
         return 1/z * (c_1 + c_2 - c_3)
 
+    def _calc_var(self, f, a, b, z):
+        """Calculates the variance using the provided parameters"""
+
+        c_1 = (t.exp(a[...,0] * f[...,0] + b[...,0]) *
+               (a[...,0]**2 * f[...,0]**2
+                - 2 * a[...,0] * f[...,0] + 2)
+               ) / a[...,0]**3
+        c_2 = ((t.exp(a[...,1:-1] * f[...,1:] + b[...,1:-1]) *
+                (a[...,1:-1]**2 * f[...,1:]**2 - 2 * a[...,1:-1] * f[...,1:] + 2) -
+               t.exp(a[...,1:-1] * f[...,:-1] + b[...,1:-1]) *
+                (a[...,1:-1]**2 * f[...,:-1]**2 - 2 * a[...,1:-1] * f[...,:-1] + 2)
+               ) / a[...,1:-1]**3).sum(-1)
+        c_3 = (t.exp(a[...,-1] * f[...,-1] + b[...,-1]) *
+               (a[...,-1]**2 * f[...,-1]**2 - 2 * a[...,-1] * f[...,-1] + 2)
+               ) / a[...,-1]**3
+
+        return 1/z * (c_1 + c_2 + c_3)
+
     def _calc_a_b(self, f, alpha, beta, avg=False):
         """Pre-computes the a and b coefficient vectors.
         Args:
@@ -406,11 +445,33 @@ class BDR_dist(Distribution):
         """
         Calculates the normalising term, Z.
         """
+        # if is allowed to be 0
+        inftest1 = (a==0).any()
+        inftest2 = (b==0).any()
+        if inftest1:
+            print(f"a is 0; avg = {avg}")
+        if inftest2:
+            print(f"b is 0; avg = {avg}")
+
+        # if any of a is zero, then add EPS
         i_0 = 1/a[...,0] * t.exp(a[...,0] * f[...,0] + b[...,0])
         i_1 = 1/a[...,1:-1] * t.exp(b[...,1:-1]) * (
             t.exp(a[...,1:-1] * f[...,1:]) - t.exp(a[...,1:-1] * f[...,:-1])
         )
         i_2 = 1/a[...,-1] * t.exp(a[...,-1] * f[...,-1] + b[...,-1])
+
+        inftest0 = t.isinf(i_0).any()
+        inftest1 = t.isinf(i_1).any()
+        inftest2 = t.isinf(i_2).any()
+        if inftest0:
+            print(f"i0 is inf; avg = {avg}")
+            i_0 = t.nan_to_num(i_0)
+        if inftest1:
+            print(f"i1 is inf; avg = {avg}")
+            i_1 = t.nan_to_num(i_1)
+        if inftest2:
+            print(f"i2 is inf; avg = {avg}")
+            i_2 = t.nan_to_num(i_2)
 
         if avg:
             self.i_0_avg = i_0
@@ -422,6 +483,11 @@ class BDR_dist(Distribution):
             self.i_1 = i_1
             self.i_2 = i_2
             self.Z = i_0 + i_1.sum(-1) - i_2
+
+        nantest = t.isnan(self.Z).any()
+        if nantest:
+            print("Z has inf")
+            # sys.exit()
 
     def _calc_modes(self, f):
         """
@@ -480,17 +546,33 @@ class BDR_dist(Distribution):
         self.fp_init = True
         self.f_inv   = self.cdf(self.f).squeeze(-1)
         self._mean   = self._calc_mean(self.f, self.a, self.b, self.Z)
+        self._var    = self._calc_var (self.f, self.a, self.b, self.Z)
 
         # Averaged parameters:
         self.f_avg     = self.f.mean(0).unsqueeze(0)
         self.alpha_avg = self.alpha.mean(0).unsqueeze(0)
         self.beta_avg  = self.beta.mean(0).unsqueeze(0)
+
+        # For numerical stability, ensure that neight alpha nor beta are 0
+        # EPS = 0.00001
+        # if (self.alpha_avg.abs() <= EPS).any():
+        #     print("Warning: alpha_avg is small:", (self.alpha_avg.abs()<=EPS).sum())
+        #     self.alpha_avg = t.where(self.alpha_avg.abs() <= EPS,
+        #                              self.alpha_avg + (self.alpha_avg.sign()+0.1) * EPS,
+        #                              self.alpha_avg)
+        # if (self.beta_avg.abs() <= EPS).any():
+        #     print("Warning: alpha_avg is small:", (self.beta_avg.abs()<=EPS).sum())
+        #     self.beta_avg = t.where(self.beta_avg.abs() <= EPS,
+        #                             self.beta_avg + (self.beta_avg.sign()+0.1) * EPS,
+        #                             self.beta_avg)
+
         self._calc_a_b(self.f_avg, self.alpha_avg, self.beta_avg, avg=True)
         self._calc_norm(self.f_avg, self.a_avg, self.b_avg, avg=True)
         self._calc_modes(self.f_avg)
         # self._calc_modes(self.f_avg, avg=True)
         self.f_inv_avg = self.cdf(self.f_avg, avg=True).squeeze(-1)
         self._mean_avg = self._calc_mean(self.f_avg, self.a_avg, self.b_avg, self.Z_avg)
+        self._var_avg  = self._calc_var (self.f_avg, self.a_avg, self.b_avg, self.Z_avg)
 
     def _validate_sample(self, value, avg=False):
         """Argument validation for distribution methods.
@@ -527,7 +609,7 @@ class BDR_dist(Distribution):
                    "avoid computation spikes\n\twhen using avg=True in a method.\n"))
             self._init_full_props()
 
-        if value.dtype != self.dtype:
+        if not value.dtype == self.dtype:
             value = value.to(dtype=self.dtype)
 
         # Case a
@@ -595,9 +677,9 @@ class BDR_dist(Distribution):
         Hint:
             If you will only call this class' ``log_prob`` method, then set
             ``full_props=False`` (default), however if you intend to call
-            ``sample``, ``cdf``, ``icdf``, ``modes``, ``mean`` (among others),
-            then you can set ``full_props=True`` to compute required properties
-            ahead of time.
+            ``sample``, ``cdf``, ``icdf``, ``modes``, ``mean``, ``var`` (among
+            others), then you can set ``full_props=True`` to compute required
+            properties ahead of time.
 
         Example:
 
@@ -643,9 +725,20 @@ class BDR_dist(Distribution):
         return self._mean if not avg else self._mean_avg
 
     def variance(self, avg=False):
-        # TODO; this should be a fairly straightforward integral (similar to
-        # the one for the mean)
-        raise NotImplementedError
+        """Returns the variance of the distribution (or batch of distributions).
+
+        Args:
+            avg (Boolean): Whether to return the variance of the distribution found
+                by averaging the sampled parameters (True) or the variance of each
+                sampled distribution.
+        """
+        if not self.fp_init:
+            if not avg:
+                return self._calc_var(self.f, self.a, self.b, self.Z)
+            else:
+                return self._calc_var(self.f_avg, self.a_avg, self.b_avg,
+                                      self.Z_avg)
+        return self._var if not avg else self._var_avg
 
     def modes(self, avg=False):
         """Hard to use; consider using mode_at instead.
@@ -788,6 +881,8 @@ class BDR_dist(Distribution):
 
         if not self.fp_init:
             self._init_full_props()
+        if isinstance(value, float):
+            value = t.tensor(value).to(dtype = self.dtype, device=self.device)#.unsqueeze(-1)#.unsqueeze(-1)
         value = self._validate_sample(value, True)
 
         if not constraints.unit_interval.check(value).all():

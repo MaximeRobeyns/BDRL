@@ -1,6 +1,4 @@
-# DQN configuration Options
-# Prefix constants by %, and 'external configurables' by @
-# See utils/gin/configurable.py for available values.
+# PLLE configuration for 'cross chain' mdp with Deep Ensemble training
 
 # General
 main.random_episodes = 50
@@ -9,6 +7,7 @@ main.agent           = @Ensemble_agent
 main.env             = 'CrossChainMDP-v0'
 main.render          = True
 main.render_training = True
+main.logfile         = 'results/cross_chain_ensemble.csv'
 
 # Network
 Ensemble.E              = 5

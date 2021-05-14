@@ -1,6 +1,4 @@
-# DQN configuration Options
-# Prefix constants by %, and 'external configurables' by @
-# See utils/gin/configurable.py for available values.
+# DQN configuration for chain MDP
 
 # General
 main.random_episodes = 40
@@ -9,6 +7,7 @@ main.agent           = @DQN_agent
 main.env             = 'ChainMDP-v0'
 main.render          = True
 main.render_training = False
+main.logfile         = 'results/chain_dqn.csv'
 
 # Network
 ANN.layer_sizes = (25,)

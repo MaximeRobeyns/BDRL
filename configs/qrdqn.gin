@@ -1,0 +1,42 @@
+# QRDQN configuration options for CartPole
+
+# General
+main.random_episodes = 100
+main.episodes        = 200
+main.agent           = @QRDQN_agent
+main.env             = 'CartPole-v0'
+# main.env             = 'LunarLander-v2'
+main.render          = False
+main.render_training = False
+main.logfile         = 'results/qrdqn_cartpole.csv'
+
+# Network
+QRNET.layer_sizes = (50,)
+QRNET.dtype       = %float32
+QRNET.device      = 'cpu'
+
+# Agent
+QRDQN_agent.train_batch       = 32
+QRDQN_agent.N                 = 40
+QRDQN_agent.kappa             = 1
+QRDQN_agent.seed              = 42
+QRDQN_agent.dtype             = %float32
+QRDQN_agent.device            = 'cpu'
+QRDQN_agent.storage_device    = 'cpu'
+QRDQN_agent.opt               = @adam
+QRDQN_agent.lr                = 1e-4
+QRDQN_agent.eps_min           = 0.05
+QRDQN_agent.eps_max           = 0.9
+QRDQN_agent.eps_decay         = 100
+QRDQN_agent.gamma             = 0.99
+QRDQN_agent.target_update     = 30
+QRDQN_agent.loss              = @huberloss
+QRDQN_agent.scale_rewards     = False
+QRDQN_agent.train_steps_per_transition = 40
+
+# Reward Scaling
+RewardScaler.min       = 0
+RewardScaler.max       = 200
+RewardScaler.scale_min = 0
+RewardScaler.scale_max = 10
+

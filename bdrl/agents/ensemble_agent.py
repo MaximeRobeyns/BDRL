@@ -176,4 +176,4 @@ class EnsembleAgent(DistributionalAgent):
         # Evaluate the likelihood of the target points for each of the (s,a)
         # distributions in the original batch.
         batch_sa = t.cat((s, one_hot(a, self.act_shape)), 1)
-        self.net.train(batch_sa, targets, epochs=5, batch_size=32)
+        self.net.train(batch_sa, targets, epochs=2, batch_size=32)

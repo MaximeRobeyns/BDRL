@@ -1,6 +1,4 @@
-# DQN configuration Options
-# Prefix constants by %, and 'external configurables' by @
-# See utils/gin/configurable.py for available values.
+# PLLE Agent configuration for chain MDP
 
 # General
 main.random_episodes = 50
@@ -9,6 +7,7 @@ main.agent           = @BDRL_agent
 main.env             = 'ChainMDP-v0'
 main.render          = True
 main.render_training = False
+main.logfile         = 'results/chain_bdrl.csv'
 
 # Network
 BDR.inducing_batch = 30
@@ -42,5 +41,5 @@ RewardScaler.scale_min = -1
 RewardScaler.scale_max = 1
 
 # Environment
-ChainMDP.length         = 3
+ChainMDP.length         = 1
 ChainMDP.num_pts_render = 100

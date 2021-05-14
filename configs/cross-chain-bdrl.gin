@@ -1,6 +1,4 @@
-# DQN configuration Options
-# Prefix constants by %, and 'external configurables' by @
-# See utils/gin/configurable.py for available values.
+# PLLE configuration for 'cross chain' mdp
 
 # General
 main.random_episodes = 50
@@ -9,6 +7,7 @@ main.agent           = @BDRL_agent
 main.env             = 'CrossChainMDP-v0'
 main.render          = True
 main.render_training = False
+main.logfile         = 'results/cross_chain_bdrl.csv'
 
 # Network
 BDR.inducing_batch = 30

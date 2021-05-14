@@ -4,11 +4,12 @@
 
 # General
 main.random_episodes = 100
-main.episodes        = 200
+main.episodes        = 2
 main.agent           = @DQN_agent
 main.env             = 'CartPole-v0'
-main.render          = True
+main.render          = False
 main.render_training = False
+main.logfile         = 'results/dqn_cartpole.csv'
 
 # Network
 ANN.layer_sizes = (25,)

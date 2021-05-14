@@ -57,6 +57,7 @@ class Agent(metaclass=abc.ABCMeta):
         self.env = env
         if scale_rewards:
             self.env = wrappers.RewardScaler(self.env)
+
         self.env.action_space.seed(seed)
         self.obs_shape = self.env.observation_space.shape
         self.act_shape = self.env.action_space.n
@@ -69,17 +70,6 @@ class Agent(metaclass=abc.ABCMeta):
             self.dtype,
             t.int64
         )
-
-    # # Enforce implementation of the following methods
-    # @classmethod
-    # def __subclasshook__(cls, subclass):
-    #     return (
-    #         hasattr(subclass, "train_step") and
-    #         hasattr(subclass, "get_action") and
-    #         callable(subclass.train_step) and
-    #         callable(subclass.get_action) and
-    #         NotImplemented
-    #     )
 
     @abc.abstractmethod
     def train_step(self):
@@ -110,14 +100,14 @@ class Agent(metaclass=abc.ABCMeta):
         """
         s = self.env.reset()
         done = False
-        t = 0
+        time = 0
         total_reward = 0.
 
-        while (not done) and (t < self.max_episode_steps):
+        while (not done) and (time < self.max_episode_steps):
             if random_exploration:
                 a = self.env.action_space.sample()
             else:
-                a = self.get_action(s)
+                a = self.get_action(t.tensor(s))
 
             sp, r, done, _ = self.env.step(a)
             if render:
@@ -129,7 +119,7 @@ class Agent(metaclass=abc.ABCMeta):
             if not random_exploration:
                 for _ in range(self.train_steps_per_transition):
                     self.train_step()
-            t += 1
+            time += 1
             s = sp
 
         return total_reward
@@ -142,20 +132,18 @@ class Agent(metaclass=abc.ABCMeta):
         s = self.env.reset()
         done = False
         total_reward = 0.
-        t = 0
+        time = 0
 
         if render:
             self.env.render()
-            time.sleep(0.25)
 
         while not done:
-            t += 1
+            time += 1
             a = self.get_action(s)
             s, r, done, _ = self.env.step(a)
             total_reward += r
             if render:
                 self.env.render()
-                time.sleep(0.25)
         return total_reward
 
 class DistributionalAgent(Agent):
@@ -190,16 +178,17 @@ class DistributionalAgent(Agent):
         """
         s = self.env.reset()
         done = False
-        t = 0
+        time = 0
         total_reward = 0.
 
         if render:
-            a = self.get_action(s)
-            return_dist = self.get_return_dists(s)
-            self.env.render(dist=return_dist)
-            time.sleep(0.5)
+            # a = self.get_action(s)
+            # return_dist = self.get_return_dists(s)
+            # self.env.render(dist=return_dist)
+            # time.sleep(0.5)
+            self.env.render()
 
-        while (not done) and (t < self.max_episode_steps):
+        while (not done) and (time < self.max_episode_steps):
             if random_exploration:
                 a = self.env.action_space.sample()
             else:
@@ -209,17 +198,18 @@ class DistributionalAgent(Agent):
             total_reward += r
 
             if render:
-                a = self.get_action(s)
-                return_dist = self.get_return_dists(s)
-                self.env.render(dist=return_dist)
-                time.sleep(0.5)
+                # a = self.get_action(s)
+                # return_dist = self.get_return_dists(s)
+                # self.env.render(dist=return_dist)
+                # time.sleep(0.5)
+                self.env.render()
 
             self.buffer.add_state(s, a, sp, r, done)
 
             if not random_exploration:
                 for _ in range(self.train_steps_per_transition):
                     self.train_step()
-            t += 1
+            time += 1
             s = sp
 
         return total_reward
@@ -228,24 +218,26 @@ class DistributionalAgent(Agent):
         s = self.env.reset()
         done = False
         total_reward = 0.
-        t = 0
+        time = 0
 
         if render:
-            a = self.get_action(s)
-            return_dist = self.get_return_dists(s)
-            self.env.render(dist=return_dist)
-            time.sleep(0.5)
+            # a = self.get_action(s)
+            # return_dist = self.get_return_dists(s)
+            # self.env.render(dist=return_dist)
+            # time.sleep(0.5)
+            self.env.render()
 
         while not done:
-            t += 1
+            time += 1
             a = self.get_action(s)
             s, r, done, _ = self.env.step(a)
             total_reward += r
 
             # placing render here allows us to see the final state.
             if render:
-                return_dist = self.get_return_dists(s)
-                self.env.render(dist=return_dist)
-                time.sleep(0.5)
+                # return_dist = self.get_return_dists(s)
+                # self.env.render(dist=return_dist)
+                # time.sleep(0.5)
+                self.env.render()
 
         return total_reward

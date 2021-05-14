@@ -1,17 +1,17 @@
-# Config for PLLE Agent with Deep Ensemble training for chain MDP
+# PLLE Agent with Deep Ensemble training
 
 # General
 main.random_episodes = 50
 main.episodes        = 50
 main.agent           = @Ensemble_agent
-main.env             = 'ChainMDP-v0'
+main.env             = 'CartPole-v0'
 main.render          = True
-main.render_training = False
-main.logfile         = 'results/chain_ensemble.csv'
+main.render_training = True
+main.logfile         = 'results/ensemble_cartpole.csv'
 
 # Network
-Ensemble.E              = 5
-Ensemble.N              = 11
+Ensemble.E              = 2
+Ensemble.N              = 5
 Ensemble.layer_sizes    = (50,)
 Ensemble.lr             = 0.05
 Ensemble.opt            = @adam
@@ -20,22 +20,19 @@ Ensemble.device         = 'cpu'
 Ensemble.f_postproc     = 'sort'
 
 # Agent
-Ensemble_agent.train_batch       = 50
+Ensemble_agent.train_batch       = 30
 Ensemble_agent.seed              = 42
 Ensemble_agent.dtype             = %float32
 Ensemble_agent.device            = 'cpu'
 Ensemble_agent.storage_device    = 'cpu'
 Ensemble_agent.gamma             = 0.99
 Ensemble_agent.N_train           = 20
-Ensemble_agent.scale_rewards     = False
+Ensemble_agent.scale_rewards     = True
 Ensemble_agent.train_steps_per_transition = 10
 
 # Reward Scaling
-RewardScaler.min       = -1
-RewardScaler.max       = 1
-RewardScaler.scale_min = -1
+RewardScaler.min       = 0
+RewardScaler.max       = 200
+RewardScaler.scale_min = 0
 RewardScaler.scale_max = 1
 
-# Environment
-ChainMDP.length         = 2
-ChainMDP.num_pts_render = 100

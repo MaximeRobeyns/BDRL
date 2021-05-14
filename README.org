@@ -19,6 +19,8 @@ And install in development mode:
 pip install -e .
 #+END_SRC
 
+Note: you may need to install third party dependencies first such as [[https://github.com/LaurenceA/bayesfunc][Bayesfunc]].
+
 ** Running an Agent
 
 Agents are configured using [[https://github.com/google/gin-config][gin]] configuration files, so that the agent

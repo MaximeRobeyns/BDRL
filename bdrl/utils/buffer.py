@@ -52,6 +52,11 @@ class Buffer(metaclass=abc.ABCMeta):
         self.sp = t.zeros((init_buffer, *state_shape), device=storage_device)
         self.d  = t.zeros((init_buffer, 1),            device=storage_device)
 
+        self.s_mean = 0
+        self.s_std  = 1
+        self.r_mean = 0
+        self.r_std  = 1
+
     def _expand_buffer(self, old_buffer):
         assert old_buffer.shape[0] == self.filled_buffer
         new_buffer = t.zeros((self.buffer_size, *old_buffer.shape[1:]),
@@ -95,7 +100,7 @@ class Buffer(metaclass=abc.ABCMeta):
                     range(T-(self.filled_buffer-start))
                 )
 
-    def _batch(self, idxs):
+    def _batch(self, idxs, norm=False):
         """
         Return a batch from the given indexes.
         """
@@ -112,7 +117,7 @@ class Buffer(metaclass=abc.ABCMeta):
         Args:
             s : The current state (numpy array)
             a : The current action (usually integer)
-            sp: The next state (s')
+            sp: The next state (s', also numpy)
             r : The reward for this transition
         """
         # 'dynamically' resize buffer if required
